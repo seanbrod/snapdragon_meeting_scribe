@@ -1,0 +1,14 @@
+BACK
+- get live inference with whisper AI working
+- make whisper run as onnx model
+- setup inference and app to run on Snapdragon X elite hexagon npu on QAI_hub
+- add plot of performance (JOBS)
+- add logging
+- add error
+
+MAIN
+-make gui and link button to on and off.
+-print inference to screen and save to text file entire run
+
+APPLICATION
+- containerize in docker

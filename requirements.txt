@@ -1,0 +1,5 @@
+#back
+qai-hub==0.21.0
+whisper==1.1.10
+
+#main

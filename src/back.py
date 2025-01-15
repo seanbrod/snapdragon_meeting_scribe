@@ -1,66 +1,83 @@
-import qai_hub as hub
+#Sean Broderick
+import pyaudio, wave, tempfile, subprocess, os
 
-#devices = hub.get_devices()
-#print(devices)
 
-#use whisper AI and get lectures or videos to break down into text. 
-#https://medium.com/@jwcsavage/using-openais-whisper-to-transcribe-real-time-audio-c2ea27f6037f 5 sec breakup
-
-#FUNCTIONS___________________________________________________________________________________________
+#DOCS
+# https://medium.com/microsoftazure/build-and-deploy-fast-and-portable-speech-recognition-applications-with-onnx-runtime-and-whisper-5bf0969dd56b run whisper with onnx runtime and whisper onnx export
 
 def transcribe_to_txt(input_filename: str, output_filename: str):
-    print('Running whisper transcription...')
-    # Compose the command of all components
+    print("Running Whisper transcription...")
+    # Compose the command for Whisper
     command = ['./main', '-f', input_filename, '-otxt', '-of', output_filename, '-np']
 
-    # Execute the command
+    # Execute the command and capture output
     result = subprocess.run(command, capture_output=True, text=True)
+    if result.returncode != 0:
+        print("Error during transcription:", result.stderr)
+    else:
+        print("Transcription completed.")
 
-def test_function():
-    transcribe_to_txt('audio_xkf1lhwh.wav', 'output.txt')
+def capture_audio(self): #TODO: save entire transcription to textfile as well as sending out tokens to main
+    # Initialize PyAudio
+    p = pyaudio.PyAudio()
 
-def callback(indata, frames, time, status):
-    # Raise for status if required
-    if status:
-        print(status)
-    
-    # Create a tempfile to save the audio to, with autodeletion
-    with tempfile.NamedTemporaryFile(delete=True, suffix='.wav', prefix='audio_', dir='.') as tmpfile:
-        # Save the 5 second audio to a .wav file
-        with wave.open(tmpfile.name, 'wb') as wav_file:
-            wav_file.setnchannels(1)  # Mono audio
-            wav_file.setsampwidth(2)  # 16-bit audio
-            wav_file.setframerate(16000)  # Sample rate
-            wav_file.writeframes(indata)
-        
-        # Prepare the output filename
-        output_filename = tmpfile.name.replace('.wav', '')
-        
-        # Transcribe the audio to text using our whisper.cpp wrapper
-        transcribe_to_txt(tmpfile.name, output_filename)
+    # Find the default loopback device for system audio capture
+    for i in range(p.get_device_count()):
+        device_info = p.get_device_info_by_index(i)
+        if device_info.get("name") == "Stereo Mix" or device_info.get("hostApi") == "Windows WASAPI" and device_info.get(
+                "maxInputChannels") > 0:
+            loopback_device_index = i
+            break
+    else:
+        print("Could not find a loopback device for system audio capture.")
+        return
 
-        # Print the transcribed text
-        with open(output_filename + '.txt', 'r') as file:
-            print(file.read())
-        
-        # Clean up temporary files
-        os.remove(output_filename + '.txt')
+    print(f"Using device: {p.get_device_info_by_index(loopback_device_index).get('name')}")
 
-def run():
+    # Set up stream for capturing system audio
+    stream = p.open(format=pyaudio.paInt16,  # 16-bit audio
+                    channels=2,  # Stereo
+                    rate=44100,  # CD quality
+                    input=True,
+                    frames_per_buffer=44100 * 5,  # 5 seconds of audio
+                    input_device_index=loopback_device_index,
+                    as_loopback=True)
+
     try:
-        # Start recording with a rolling 5-second buffer
-        with sd.InputStream(callback=callback, dtype='int16', channels=1, samplerate=16000, blocksize=16000*5):
-            print("Recording... Press Ctrl+C to stop.")
-            while True:
-                pass
+        print("Recording system audio... Press Ctrl+C to stop.")
+        while True:
+            # Read audio data from the stream
+            audio_data = stream.read(44100 * 5, exception_on_overflow=False)
+
+            # Save audio data to a temporary WAV file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav", prefix="system_audio_", dir=".") as tmpfile:
+                with wave.open(tmpfile.name, "wb") as wav_file:
+                    wav_file.setnchannels(2)  # Stereo
+                    wav_file.setsampwidth(p.get_sample_size(pyaudio.paInt16))
+                    wav_file.setframerate(44100)
+                    wav_file.writeframes(audio_data)
+
+                # Transcribe the saved audio
+                output_filename = tmpfile.name.replace(".wav", "")
+                transcribe_to_txt(tmpfile.name, output_filename)
+
+                # Print the transcribed text
+                try:
+                    with open(output_filename + ".txt", "r") as file:
+                        print(file.read())
+                except FileNotFoundError:
+                    print("Transcription output not found.")
+
+                # Clean up temporary files
+                os.remove(tmpfile.name)
+                if os.path.exists(output_filename + ".txt"):
+                    os.remove(output_filename + ".txt")
     except KeyboardInterrupt:
-        print('Recording stopped.')
-
-#MAIN___________________________________________________________________________________________
-
-def main():
-    execution_time = timeit.timeit('test_function()', globals=globals(), number=100)
-    print(f"Average execution time: {execution_time / 100:.5f} seconds")    
+        print("Recording stopped.")
+    finally:
+        stream.stop_stream()
+        stream.close()
+        p.terminate()
 
 if __name__ == "__main__":
-    main()
+    capture_audio()

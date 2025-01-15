@@ -1,5 +1,8 @@
 #back
-qai-hub==0.21.0
-whisper==1.1.10
+PyAudio==0.2.14
 
 #main
+PySide6==6.8.1.1
+
+#qai_check
+qai-hub==0.21.0
